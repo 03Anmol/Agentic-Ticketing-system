@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Train Ticket Agent</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Train Ticket Agent</h1>
+      <div class="subtitle">Search &amp; assisted booking across IRCTC / ixigo / ConfirmTkt (mock adapters - see docs/FRD.md)</div>
+    </div>
+  </header>
+
+  <nav>
+    <button data-tab="search" class="active">Search</button>
+    <button data-tab="jobs">Scheduled Jobs</button>
+    <button data-tab="passengers">Passengers</button>
+    <button data-tab="audit">Audit Log</button>
+  </nav>
+
+  <main>
+    <div id="notif-area"></div>
+
+    <section id="tab-search" class="tab active">
+      <div class="card">
+        <label>Tell it what you need</label>
+        <textarea id="journey-text" placeholder='e.g. "Book AC 3-tier from Delhi to Mumbai this Friday, Tatkal, 2 adults"'></textarea>
+        <button class="primary" id="parse-btn">Parse request</button>
+      </div>
+
+      <div class="card" id="confirm-card" style="display:none">
+        <div class="muted" id="clarification-note"></div>
+        <div class="row">
+          <div><label>Origin</label><input id="f-origin" /></div>
+          <div><label>Destination</label><input id="f-destination" /></div>
+        </div>
+        <div class="row">
+          <div><label>Travel date (YYYY-MM-DD)</label><input id="f-date" /></div>
+          <div><label>Class</label>
+            <select id="f-class">
+              <option value="">Any</option>
+              <option>1A</option><option>2A</option><option>3A</option><option>SL</option><option>CC</option><option>2S</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <div><label>Quota</label>
+            <select id="f-quota">
+              <option value="">Any</option>
+              <option value="GENERAL">General</option>
+              <option value="TATKAL">Tatkal</option>
+              <option value="PREMIUM_TATKAL">Premium Tatkal</option>
+              <option value="LADIES">Ladies</option>
+              <option value="SENIOR">Senior</option>
+            </select>
+          </div>
+          <div><label>Passengers</label><input id="f-passengers" type="number" min="1" value="1" /></div>
+        </div>
+        <div class="row">
+          <div>
+            <label>Preferred berth (optional - bumps matching options to the top of their availability tier)</label>
+            <select id="f-pref-berth">
+              <option value="">No preference</option>
+              <option value="LOWER">Lower</option>
+              <option value="MIDDLE">Middle</option>
+              <option value="UPPER">Upper</option>
+              <option value="SIDE_LOWER">Side Lower</option>
+              <option value="SIDE_UPPER">Side Upper</option>
+            </select>
+          </div>
+        </div>
+        <button class="primary" id="search-btn">Confirm &amp; search</button>
+      </div>
+
+      <div class="card" id="results-card" style="display:none">
+        <div class="status-board" id="platform-status"></div>
+        <p class="muted" id="summary-text"></p>
+        <table>
+          <thead>
+            <tr>
+              <th>Platform</th><th>Train</th><th>Class</th><th>Dep</th><th>Arr</th>
+              <th>Fare</th><th>Availability</th><th>Berths</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="results-body"></tbody>
+        </table>
+      </div>
+
+      <div class="card" id="schedule-card" style="display:none">
+        <h3 style="margin-top:0">Schedule a Tatkal-style booking</h3>
+        <p class="muted">Staging happens automatically ahead of the window. You still confirm &amp; solve the CAPTCHA yourself when it's ready - see docs/PRD.md S2.</p>
+        <div class="row">
+          <div><label>Window opens (IST, local time on this machine)</label><input id="sched-time" type="datetime-local" /></div>
+          <div><label>Lead time (seconds before window)</label><input id="sched-lead" type="number" value="120" /></div>
+        </div>
+        <button class="primary" id="sched-btn">Schedule staging</button>
+      </div>
+    </section>
+
+    <section id="tab-jobs" class="tab">
+      <div class="card">
+        <p class="muted">Auto-refreshes every 4s while this tab is open. <button class="secondary" id="refresh-jobs">Refresh now</button></p>
+        <table>
+          <thead><tr><th>Platform</th><th>Window (IST)</th><th>Status</th><th>Countdown</th><th></th></tr></thead>
+          <tbody id="jobs-body"></tbody>
+        </table>
+      </div>
+      <div class="card" id="confirm-panel" style="display:none"></div>
+    </section>
+
+    <section id="tab-passengers" class="tab">
+      <div class="card">
+        <div class="row">
+          <div><label>Name</label><input id="p-name" /></div>
+          <div><label>Age</label><input id="p-age" type="number" /></div>
+          <div><label>Gender</label>
+            <select id="p-gender"><option>M</option><option>F</option><option>Other</option></select>
+          </div>
+          <div><label>Berth preference</label>
+            <select id="p-berth"><option value="">None</option><option>Lower</option><option>Middle</option><option>Upper</option><option>Side Lower</option><option>Side Upper</option></select>
+          </div>
+        </div>
+        <button class="primary" id="add-passenger-btn">Save passenger</button>
+      </div>
+      <div class="card">
+        <table>
+          <thead><tr><th>Name</th><th>Age</th><th>Gender</th><th>Berth</th><th></th></tr></thead>
+          <tbody id="passengers-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="tab-audit" class="tab">
+      <div class="card">
+        <button class="secondary" id="refresh-audit">Refresh</button>
+        <table>
+          <thead><tr><th>Time</th><th>Agent</th><th>Action</th><th>Outcome</th><th>Target</th></tr></thead>
+          <tbody id="audit-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

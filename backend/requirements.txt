@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+apscheduler
+langgraph
+python-multipart
+google-genai
+python-dotenv

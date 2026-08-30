@@ -31,6 +31,21 @@ from . import guardrail
 _AGENTS = [IRCTCSearchAgent(), IxigoSearchAgent(), ConfirmTktSearchAgent()]
 
 
+def data_source_summary() -> dict:
+    """
+    Which adapters are returning real data and which are generating it. The UI
+    needs this to label results honestly - see SearchAgent.is_live.
+    """
+    live = [a.platform_name for a in _AGENTS if getattr(a, "is_live", False)]
+    simulated = [a.platform_name for a in _AGENTS if not getattr(a, "is_live", False)]
+    return {
+        "live_platforms": live,
+        "simulated_platforms": simulated,
+        "any_simulated": bool(simulated),
+        "all_simulated": not live,
+    }
+
+
 def _merge_status(a: dict, b: dict) -> dict:
     return {**a, **b}
 

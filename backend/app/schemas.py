@@ -102,6 +102,12 @@ class ScheduledJobIn(BaseModel):
         return v
 
 
+class ImmediateJobIn(BaseModel):
+    journey_request_id: str
+    train_option_id: str
+    target_platform: str
+
+
 class ScheduledJobOut(BaseModel):
     id: str
     journey_request_id: str
@@ -110,6 +116,9 @@ class ScheduledJobOut(BaseModel):
     window_open_time_ist: datetime
     lead_time_seconds: int
     status: str
+    booking_mode: str = "scheduled"
+    pnr: Optional[str] = None
+    booked_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -135,6 +144,15 @@ class NotificationOut(BaseModel):
 
 class CompleteBookingIn(BaseModel):
     token_id: str
+
+
+class RecordPnrIn(BaseModel):
+    pnr: str
+
+
+class ChecklistStepIn(BaseModel):
+    step_key: str
+    done: bool = True
 
 
 class AuditLogOut(BaseModel):

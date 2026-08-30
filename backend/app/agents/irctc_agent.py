@@ -8,6 +8,7 @@ class IRCTCSearchAgent:
     """STUB adapter - see mock_data.py docstring for what's needed to go live."""
 
     platform_name = "IRCTC"
+    is_live = False  # generated data - see mock_data.py
 
     async def search(
         self,

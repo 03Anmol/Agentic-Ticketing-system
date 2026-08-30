@@ -4,11 +4,11 @@
 | Field | Value |
 |---|---|
 | Author | Anmol |
-| Status | Draft v0.1 |
-| Last updated | 2026-08-29 |
-| Related doc | [PRD.md](./PRD.md) |
+| Status | v0.3 — FR-1..FR-11 built; FR-12..FR-15 added for the Launch Pad |
+| Last updated | 2026-08-30 |
+| Related doc | [PRD.md](./PRD.md), [AUTOMATION_LIMITS.md](./AUTOMATION_LIMITS.md) |
 
-Read [PRD.md §2](./PRD.md) before this document — the human-confirmation gate on booking is a hard constraint on FR-7 below, not an implementation detail.
+Read [PRD.md §2](./PRD.md) before this document — the human-confirmation gate on booking is a hard constraint on FR-7 below, not an implementation detail. [PRD.md §2a](./PRD.md) settles the recurring "let the agent browse the site" question; it is not reopened here.
 
 ---
 
@@ -121,6 +121,40 @@ flowchart TD
 - **Saved profiles:** passenger details, frequent routes.
 - Responsive/mobile-first (Tatkal windows are often handled on a phone).
 
+### FR-12 — Booking Modes: Book Now vs. Scheduled
+
+- Every `ScheduledJob` carries a `booking_mode` of `immediate` or `scheduled`.
+- **`immediate`** (the common case, any non-Tatkal journey): created already `staged_and_waiting`, with no scheduler entry and no pre-window reminders, because there is no window to wait for. `POST /api/jobs/immediate`.
+- **`scheduled`**: the existing FR-5 path, for timed quota windows only.
+- Requiring a `window_open_time` for every booking — the pre-FR-12 behaviour — forced users to invent one for journeys that had none, and was the app's single biggest source of confusion.
+- The internal confirm-token flow (FR-7) is not offered on `immediate` jobs: they never pass through mock staging, so the control would appear to confirm a real booking and would not.
+
+### FR-13 — Booking Handoff Agent (the "Launch Pad")
+
+`GET /api/jobs/{id}/handoff` returns everything needed at the window on one screen:
+
+- **Countdown** to the window, anchored to server time (scheduled mode only).
+- **Window sanity check** — the real Tatkal instant is computed from travel date and class (day before travel; 10:00 IST for AC classes, 11:00 for non-AC) and a mismatch against the scheduled time is returned as `window_warning`.
+- **Selection spec** — station codes, date, train, class, quota, passenger count, expected fare — so nothing must be decided or looked up while the clock runs.
+- **Passenger block** — paste-ready, with a shortfall count when fewer profiles exist than the journey needs.
+- **Booking URL** — the real IRCTC search page. No prefill parameters: IRCTC publishes no documented deep-link format, and a guessed one would return 200 with a blank screen on their SPA, i.e. fail while looking like this app's bug. `build_booking_url()` is the single place to add one if a format is ever verified.
+
+### FR-14 — Guided Prep Checklist
+
+- Steps are a **sequence**, not a flat list. Exactly one is `current` — the first not yet done — and the UI expands it.
+- Each step carries: instruction, rationale, an in-app **click path** where the destination has no linkable URL, **verified external links**, and contextual tips.
+- `POST /api/jobs/{id}/checklist` toggles a step and returns the refreshed handoff, so the UI advances in one round trip.
+- **Completed steps stay in the list with full content** and can be reopened; they are also never flagged overdue, since nagging about finished work is what makes people stop reading a checklist.
+- Progress persists in `ScheduledJob.checklist_progress` (JSON, keyed by step → completion timestamp). It must survive a refresh, a browser restart, or a device change: a Tatkal prep run begins 30 minutes before the window.
+- Scheduled-mode steps carry deadlines at T-30m (Master List), T-20m (eWallet), T-10m (login), T-2m (open page), T-0 (decline insurance). Immediate mode uses the same substance with no deadlines.
+- The steps deliberately drive **IRCTC's own** speed features — Master List, eWallet, early login — which is ordinary user behaviour, not platform automation.
+
+### FR-15 — Data Provenance & PNR Capture
+
+- Every search adapter declares `is_live`. The orchestrator aggregates this into a `data_source` summary carried through to the UI, which **must** label a fare or availability figure as simulated wherever one is shown. Presenting a generated fare as a quote is worse than showing nothing, because it looks authoritative.
+- `POST /api/jobs/{id}/pnr` records a 10-digit PNR, audits it, and emails confirmation.
+- Recording a PNR **must not** set `status='confirmed'`. That status belongs to the internal mock flow; a real railway booking is evidenced only by a PNR, and conflating the two would make the audit log misrepresent which bookings actually happened.
+
 ## 4. Data Model
 
 | Entity | Key fields |
@@ -129,7 +163,7 @@ flowchart TD
 | `PassengerProfile` | id, user_id, name, age, gender, berth preference, ID proof ref |
 | `JourneyRequest` | id, user_id, raw_text, parsed origin/destination/date/class/quota, status |
 | `TrainOption` | train_no, name, departure/arrival, duration, class, quota, fare, availability, source_platform |
-| `ScheduledJob` | id, journey_request_id, target_platform, window_open_time (IST), lead_time, status (pending/staging/staged/confirmed/failed) |
+| `ScheduledJob` | id, journey_request_id, target_platform, window_open_time (IST), lead_time, status (pending/staging/staged/confirmed/failed), **booking_mode** (immediate/scheduled), **checklist_progress** (JSON step→timestamp), **pnr**, **booked_at** |
 | `PlatformCredential` | user_id, platform, encrypted credential ref (vault pointer, not the secret itself) |
 | `ConfirmationToken` | id, scheduled_job_id, issued_at, expires_at, used (bool) |
 | `AuditLogEntry` | id, timestamp, agent, action, target, outcome, related entity ids |
@@ -138,7 +172,7 @@ flowchart TD
 
 Used for:
 - Parsing natural-language journey requests into structured fields (FR-1).
-- Disambiguating station names to IRCTC station codes (e.g. "Bombay" → CSMT/BCT — ask user if ambiguous).
+- Disambiguating station names to IRCTC station codes (e.g. "Bombay" → CSMT/BCT — ask user if ambiguous). **This means emitting the CODE, not the city name.** The parser prompt originally asked for "the station/city as mentioned by the user", which yielded specs reading `From: delhi` — not a value IRCTC's station field accepts, making the whole selection spec unusable. The prompt now demands an uppercase code, names the common multi-station cities, and requires `needs_clarification` when a wrong pick would send someone to the wrong station; a response that still looks like a city name is flagged rather than passed through.
 - Summarizing/ranking comparison results in plain language (FR-4).
 - Generating the human-readable notification text (FR-8).
 

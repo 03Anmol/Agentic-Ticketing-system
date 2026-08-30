@@ -4,9 +4,9 @@
 | Field | Value |
 |---|---|
 | Author | Anmol |
-| Status | Draft v0.1 |
-| Last updated | 2026-08-29 |
-| Related doc | [FRD.md](./FRD.md) |
+| Status | v0.3 — Phase 1 + 2 built, Launch Pad shipped |
+| Last updated | 2026-08-30 |
+| Related doc | [FRD.md](./FRD.md), [AUTOMATION_LIMITS.md](./AUTOMATION_LIMITS.md) |
 
 ---
 
@@ -35,6 +35,22 @@ This is a hard constraint on the whole product, not a footnote.
 - If the user later obtains official IRCTC Agent API credentials (or a licensed partner integration), the human-confirmation gate can be removed for that specific integration path only — this is a configuration change on the Booking-Assist Agent, not a redesign (see [FRD.md §6](./FRD.md)).
 
 Every requirement below is written under this constraint. Any future request to remove the human-confirmation gate against the consumer IRCTC site should be rejected at the design-review stage, not just at code review.
+
+### 2a. On "agentic web browsing" of the booking sites (settled 2026-08-30)
+
+This has now been asked four times, in four framings: fully autonomous booking; routing through ixigo/ConfirmTkt instead; taking any user's IRCTC ID and password as a service; and "actual web inference by the agent on that website... complete agentic capabilities."
+
+**The answer does not change with the framing, because the framing was never what made it prohibited.** IRCTC's Terms & Conditions say *"Use of automation software and/or Scripting Software is strictly prohibited"* — unscoped, not limited to payment. An LLM driving a browser is automation software. Being agentic, being smart, or being careful does not exempt it; if anything an LLM-driven browser is the *most* clearly-covered case, since it is precisely software procuring tickets without authorization under Section 143 of the Railways Act, 1989.
+
+The same applies to read-only scraping of the other two: ixigo's robots.txt disallows `/search/result/` and ConfirmTkt's disallows `/rbooking/`, which are exactly the paths a search agent would need.
+
+**What the underlying want actually is, and how to satisfy it:** every one of those four requests is really asking for the same thing — *real trains, real availability, real fares* instead of placeholders. That is obtainable, and legitimately: through an authorized API (IRCTC Agent registration, or a licensed reseller). See §10 and [AUTOMATION_LIMITS.md](./AUTOMATION_LIMITS.md). The blocker on real data has never been the absence of a browser-driving agent; it is the absence of an API credential, and no amount of agent capability substitutes for one.
+
+### 2b. Maximum legitimate automation — the Launch Pad
+
+The constraint above says what the system may not do. This says how far it does go, so "we can't script IRCTC" is not mistaken for "nothing is automated."
+
+The scarce resource at a Tatkal window is **human seconds between 10:00:00 and 10:00:40**. Everything that can legitimately be moved out of that window has been moved into the minutes before it. The system autonomously: parses the request, searches and ranks, computes the real window instant and warns on mismatch, fires prep reminders at T-30m/20m/10m, precomputes the exact selection spec, prepares passenger details, opens the real IRCTC page on one click, and captures the resulting PNR. The human does only what law and ToS reserve to them: log in, select, solve the CAPTCHA, pay.
 
 ## 3. Goals
 
@@ -66,6 +82,11 @@ Every requirement below is written under this constraint. Any future request to 
 | U4 | As a user, I can see a live status board of what each subagent is doing (searching, staged, waiting-for-window, waiting-for-confirmation, done, failed). |
 | U5 | As a user, I can save passenger details and frequent routes so I don't retype them every time. |
 | U6 | As a user, I can see a full audit log of every automated action taken on my behalf, timestamped. |
+| U7 | As a user booking a normal (non-Tatkal) ticket, I press **Book now** and go straight to the handoff — I am never asked to invent a "window open time" for a journey that has no window. |
+| U8 | As a user, the prep steps are a guided sequence: one step open at a time with its own links and tips, ticking it off advances to the next, and I can reopen any earlier step to re-read what I did. |
+| U9 | As a user, my prep progress survives a page refresh or switching devices, because a Tatkal run starts 30 minutes before the window. |
+| U10 | As a user, I can paste the PNR after booking and have it stored, audited and emailed, so the system's record reflects what really happened. |
+| U11 | As a user, I can always tell whether what I'm looking at is real data or a placeholder, so I never act on a simulated fare believing it to be a quote. |
 
 ## 7. Scope
 
@@ -80,7 +101,15 @@ Every requirement below is written under this constraint. Any future request to 
 - Booking-Assist Agent: staged login + pre-fill, human-confirmation gate, notification agent (push/email/SMS).
 - Guardrail/Policy Agent enforcing §2 at runtime (not just at design time).
 
+### Phase 2b — Launch Pad (delivered 2026-08-30)
+- **Two booking modes.** *Book now* for ordinary journeys (no window, goes straight to handoff) and *Schedule Tatkal* for timed quota windows. Offering only the scheduled path forced users to fabricate a window time for bookings that had none — the single most confusing thing in the app before this.
+- **Guided step sequence** with live links, in-app click paths where IRCTC publishes no deep link, per-step tips, and DB-persisted progress that survives refresh or a device change.
+- **Real Tatkal window computation** (day before travel; 10:00 IST AC, 11:00 non-AC) with a warning when the scheduled window contradicts the class.
+- **PNR capture** — audited and emailed. Deliberately does not set `status='confirmed'`, which belongs to the internal mock flow; a real booking is evidenced only by a PNR.
+- **Provenance labelling** — results carry whether each adapter is live or generated, and the UI says so where a fare is shown.
+
 ### Phase 3
+- **Real search data — the top priority.** Everything above is real orchestration around placeholder trains, which is what makes the product feel hollow. Route this through an authorized API (see §10); it is not a scraping or agent-capability problem.
 - Multi-passenger / multi-route batch scheduling.
 - Alternate-route suggestions when the requested train has no availability (e.g. nearby dates, boarding stations, quota types).
 - If pursued: formal IRCTC agent registration to unlock a fully compliant autonomous path for that one integration.
@@ -120,7 +149,12 @@ Full breakdown, agent responsibilities, and data model are in [FRD.md](./FRD.md)
 
 ## 10. Assumptions & Dependencies
 
-- IRCTC/ixigo/ConfirmTkt have no official public read-only search API for general developers, so search will likely require either (a) each platform's own consumer-facing pages accessed the same way a browser would for *search/availability only* (not booking), or (b) any public APIs they do expose. This needs a technical spike per platform before Phase 1 is built — availability-checking automation carries much lower legal risk than booking automation, but ToS should still be checked per platform.
+- ~~IRCTC/ixigo/ConfirmTkt have no official public read-only search API, so search will likely require reading their consumer pages for *search/availability only*.~~ **Spike completed 2026-08-29/30 — result: negative.** ixigo's robots.txt disallows `/search/result/` and ConfirmTkt's disallows `/rbooking/`, i.e. exactly the paths a search adapter would need, and IRCTC's ToS bans automation software unscoped. Reading their pages is therefore off the table even for read-only search. The three shipped adapters return generated data, and the UI labels it as such.
+- **Real data must come from an authorized API.** Two viable routes, both outside the codebase:
+  1. **IRCTC Authorized Agent registration** — PAN + Aadhaar + agreement via `operations.irctc.co.in`, roughly ₹1,000–6,000 and 2–10 days. This is how ixigo and ConfirmTkt themselves get programmatic access.
+  2. **A licensed reseller API** (IndiRail, RailYatri-style partner programmes) — faster to start, no KYC on your side, but a subscription/commission cut and a dependency on their uptime and terms.
+  Each platform adapter implements one `search()` method behind a common interface, so swapping either in touches one file per platform and nothing else.
+- **Open government data covers train identities only.** `data.gov.in`'s Indian Railways Train Time Table (~2,810 trains) gives real train numbers, names and stop-by-stop schedules, and the fetcher for it is already written (`agents/real_train_catalog.py`, needs a free API key plus the dataset's resource ID). It is a timetable, not a live seat-availability feed — it cannot tell you what is bookable right now.
 - User has accounts on all three platforms already.
 - Deployment target: single web app, self-hosted or small cloud VM (not a multi-tenant SaaS product).
 - Gemini API key management is the user's responsibility (already in use — see [app.py](../../check/app.py)).

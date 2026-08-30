@@ -80,8 +80,30 @@ class ScheduledJob(Base):
     window_open_time_ist = Column(DateTime, nullable=False)
     lead_time_seconds = Column(Integer, default=120)
 
+    # 'scheduled' = wait for a Tatkal window (the reason this table exists).
+    # 'immediate' = book right now; there is no window to wait for, so no
+    # scheduler entry and no pre-window reminders are registered. Normal
+    # (non-Tatkal) booking is this mode, and it's the common case - the UI
+    # originally offered only the scheduled path, which forced users to invent
+    # a fake window time for bookings that had none.
+    booking_mode = Column(String, default="scheduled")
+
     # pending -> staging -> staged_and_waiting -> confirmed / expired / failed
     status = Column(String, default="pending")
+
+    # {step_key: ISO timestamp} for each Launch Pad step the user has ticked
+    # off. Persisted rather than kept in the page so progress survives a
+    # refresh, a browser restart, or picking the job back up on another device
+    # - a Tatkal prep run starts 30 minutes before the window, which is long
+    # enough for any of those to happen.
+    checklist_progress = Column(JSON, nullable=True)
+
+    # Set by the user after they complete the booking themselves on IRCTC
+    # (POST /api/jobs/{id}/pnr). This is the only record of a REAL booking in
+    # the system - job.status='confirmed' only ever reflects this app's own
+    # mock flow, never a live railway transaction.
+    pnr = Column(String, nullable=True)
+    booked_at = Column(DateTime, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

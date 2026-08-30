@@ -32,11 +32,19 @@ def _get_client() -> genai.Client:
     return _client
 
 
+# Station CODES, not city names, are the contract here (FRD S5: "Disambiguating
+# station names to IRCTC station codes"). The Launch Pad's whole value is
+# handing the user values they can type straight into IRCTC's booking form, and
+# "delhi" is not one of those - IRCTC's station field wants NDLS. An earlier
+# version of this prompt asked for "the city as mentioned by the user", which
+# produced specs nobody could actually use.
 PARSE_SCHEMA_HINT = """
 Return ONLY a JSON object with exactly these keys:
 {
-  "origin": string or null,        // station name/city as mentioned by the user
-  "destination": string or null,
+  "origin": string or null,        // IRCTC STATION CODE, uppercase (e.g. "NDLS", not "Delhi")
+  "origin_name": string or null,   // human-readable station name (e.g. "New Delhi")
+  "destination": string or null,   // IRCTC STATION CODE, uppercase (e.g. "AGC")
+  "destination_name": string or null,
   "travel_date": string or null,   // ISO date YYYY-MM-DD if it can be resolved, else null
   "travel_class": string or null,  // one of: "1A","2A","3A","SL","CC","2S" or null if unspecified
   "quota": string or null,         // one of: "TATKAL","GENERAL","PREMIUM_TATKAL","LADIES","SENIOR" or null
@@ -44,6 +52,17 @@ Return ONLY a JSON object with exactly these keys:
   "needs_clarification": boolean,  // true if origin/destination/date are ambiguous or missing
   "clarification_note": string or null  // short note on what's ambiguous, else null
 }
+
+Station code rules:
+- Always emit the IRCTC/Indian Railways code, uppercase, never the city name.
+- A city with several stations needs a choice: Delhi -> NDLS (New Delhi) is the
+  usual default, Mumbai -> CSMT or BCT, Chennai -> MAS, Bangalore -> SBC,
+  Kolkata -> HWH or SDAH, Agra -> AGC, Hyderabad -> SC.
+- If the city is ambiguous enough that the wrong pick would send someone to the
+  wrong station, still emit your best code BUT set needs_clarification=true and
+  say which alternatives exist in clarification_note.
+- If you genuinely cannot map it to a code, set the field to null and
+  needs_clarification=true.
 """
 
 
@@ -63,6 +82,20 @@ def parse_journey_request(raw_text: str, reference_date_iso: str) -> dict:
         data.setdefault("passenger_count", 1)
         data.setdefault("needs_clarification", False)
         data.setdefault("clarification_note", None)
+
+        # Belt and braces on the code contract above: the model occasionally
+        # returns a city name anyway. Uppercasing a genuine code is a no-op,
+        # while a lowercase city name that slips through at least becomes
+        # visibly wrong in the UI instead of silently unusable.
+        for field in ("origin", "destination"):
+            if isinstance(data.get(field), str):
+                data[field] = data[field].strip().upper()
+                if " " in data[field] or len(data[field]) > 6:
+                    data["needs_clarification"] = True
+                    data["clarification_note"] = (
+                        (data.get("clarification_note") or "")
+                        + f" Could not resolve {field} to an IRCTC station code - please correct it."
+                    ).strip()
         return data
     except Exception:
         logger.exception("Gemini parse failed, falling back to needs_clarification")

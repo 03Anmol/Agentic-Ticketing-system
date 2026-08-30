@@ -90,13 +90,24 @@
       </div>
 
       <div class="card" id="schedule-card" style="display:none">
-        <h3 style="margin-top:0">Schedule a Tatkal-style booking</h3>
-        <p class="muted">Staging happens automatically ahead of the window. You still confirm &amp; solve the CAPTCHA yourself when it's ready - see docs/PRD.md S2.</p>
+        <h3 style="margin-top:0">Schedule for a Tatkal window</h3>
+        <p class="muted">
+          <strong>Only needed for Tatkal.</strong> Tatkal seats open at one exact moment - 10:00 AM for AC
+          classes, 11:00 AM for non-AC, the day before travel - and sell out in seconds. Scheduling here means
+          the app wakes up ahead of that moment and walks you through the prep (Master List, eWallet, login) so
+          you're ready the instant it opens. For any normal booking, close this and use <strong>Book now</strong> instead.
+        </p>
         <div class="row">
-          <div><label>Window opens (IST, local time on this machine)</label><input id="sched-time" type="datetime-local" /></div>
-          <div><label>Lead time (seconds before window)</label><input id="sched-lead" type="number" value="120" /></div>
+          <div>
+            <label>When the Tatkal window opens (prefilled from your travel date &amp; class - change only if you know better)</label>
+            <input id="sched-time" type="datetime-local" />
+          </div>
+          <div>
+            <label>Start prepping this many seconds early</label>
+            <input id="sched-lead" type="number" value="120" />
+          </div>
         </div>
-        <button class="primary" id="sched-btn">Schedule staging</button>
+        <button class="primary" id="sched-btn">Schedule it</button>
       </div>
     </section>
 
@@ -104,10 +115,11 @@
       <div class="card">
         <p class="muted">Auto-refreshes every 4s while this tab is open. <button class="secondary" id="refresh-jobs">Refresh now</button></p>
         <table>
-          <thead><tr><th>Platform</th><th>Window (IST)</th><th>Status</th><th>Countdown</th><th></th></tr></thead>
+          <thead><tr><th>Platform</th><th>Mode</th><th>Window (IST)</th><th>Status</th><th>Countdown</th><th>PNR</th><th></th></tr></thead>
           <tbody id="jobs-body"></tbody>
         </table>
       </div>
+      <div class="card" id="launchpad-panel" style="display:none"></div>
       <div class="card" id="confirm-panel" style="display:none"></div>
     </section>
 

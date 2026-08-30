@@ -8,6 +8,7 @@ class ConfirmTktSearchAgent:
     """STUB adapter - see mock_data.py docstring for what's needed to go live."""
 
     platform_name = "ConfirmTkt"
+    is_live = False  # generated data - see mock_data.py
 
     async def search(
         self,

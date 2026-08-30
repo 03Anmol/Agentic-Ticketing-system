@@ -8,6 +8,7 @@ class IxigoSearchAgent:
     """STUB adapter - see mock_data.py docstring for what's needed to go live."""
 
     platform_name = "ixigo"
+    is_live = False  # generated data - see mock_data.py
 
     async def search(
         self,

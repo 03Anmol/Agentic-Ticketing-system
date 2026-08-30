@@ -28,6 +28,13 @@ class TrainOptionDTO:
 class SearchAgent(Protocol):
     platform_name: str
 
+    # False while the adapter returns generated data. The pipeline carries this
+    # all the way to the UI so a simulated fare is never displayed as though it
+    # were a real quote - showing "Rs 888.89, AVAILABLE" for a train that isn't
+    # actually on the route is worse than showing nothing, because it looks
+    # authoritative. Flip to True in the adapter when a real API is wired in.
+    is_live: bool
+
     async def search(
         self,
         origin: str,

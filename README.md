@@ -1,4 +1,4 @@
-# Train Ticket Agent — Phase 1 + 2 build
+# Agentic Ticketing System — Train Ticket Agent
 
 Implements the system described in [docs/PRD.md](docs/PRD.md) / [docs/FRD.md](docs/FRD.md): a LangGraph-orchestrated multi-agent search across IRCTC/ixigo/ConfirmTkt, a Tatkal-window scheduler, and an assisted-booking flow with a hard human-confirmation gate. Single FastAPI backend + a plain-JS frontend it serves directly — no separate Node build.
 
@@ -49,6 +49,30 @@ A SQLite file `ticket_agent.db` is created next to `backend/` on first run (hold
 3. Watch the **Scheduled Jobs** tab. When the trigger time hits, the job flips to `staged_and_waiting` and a notification banner appears at the top ("Go confirm now...").
 4. Click **Confirm booking** on that job. This is the human-confirmation gate from PRD §2 / FRD FR-7: it issues a short-lived, single-use token and only then lets you complete the booking. Trying to confirm twice, or without a valid token, is rejected — check the **Audit Log** tab to see every step (including the rejections) logged.
 
+## 3a. The Launch Pad — how you actually book a real ticket
+
+Everything above is the app's own (mock) flow. **The Launch Pad is the part you use for a real booking.** Click **Launch Pad** on any live job in the Scheduled Jobs tab.
+
+The premise: the scarce resource at a Tatkal window is *your* seconds between 10:00:00 and 10:00:40. IRCTC's login/CAPTCHA/payment can't legally be scripted (see [docs/AUTOMATION_LIMITS.md](docs/AUTOMATION_LIMITS.md)), so everything else is moved *out* of that window instead.
+
+The screen gives you, in order:
+
+1. **Live countdown** to the window, anchored to server time, plus a warning if your scheduled window contradicts the real Tatkal hour for that class (AC opens 10:00 IST, non-AC 11:00, the day before travel).
+2. **A prep checklist**, each item with its own deadline and marked overdue once it passes. These drive IRCTC's *own* speed features:
+   - **T-30m — Master List** (My Profile → Master List). Pre-saved passengers become one-click selections instead of typed fields. Biggest single time saver; useless if you leave it to 09:59.
+   - **T-20m — eWallet top-up.** Settles in ~2s and can't fail like a bank gateway can mid-window.
+   - **T-10m — log in and stay logged in.** The login page itself slows as the window approaches.
+   - **T-2m — open the booking page** with the journey already entered.
+   - **At window — decline travel insurance.** It adds a checkout step.
+3. **The exact selection spec** — train, class, quota, date, stations, expected fare — with a copy button, so nothing has to be decided or looked up while the clock runs.
+4. **Passenger block**, paste-ready, with a red flag if you have fewer profiles saved than passengers on the journey.
+5. **Open IRCTC** — one click to the real booking page in your own browser.
+6. **PNR capture** — paste the 10-digit PNR afterwards; it's stored, audited, and emailed to you.
+
+You'll also get **automatic reminders** at T-30m/20m/10m without opening the app at all (in-app banner always; email too if SMTP is configured). They stop once you record a PNR.
+
+**What you still do yourself**, because the law and IRCTC's ToS reserve it to you: log in, select the train, pick your passengers, solve the CAPTCHA, pay. Realistically ~30 seconds if the checklist is done.
+
 ## 4. Making the platform agents real
 
 Each platform has its own file under `backend/app/agents/` (`irctc_agent.py`, `ixigo_agent.py`, `confirmtkt_agent.py`), all implementing the same `search()` signature from `agents/base.py`. To go live for a given platform:
@@ -91,5 +115,6 @@ train-ticket-agent/
 
 - Auth/authZ (FRD §9) — there's no login; this is a single-user local tool as scoped in PRD §5, and the API is wide open (CORS `*`). Add real auth before exposing this beyond localhost.
 - Secrets vault (FRD §9) — `.env` is fine for one user on one machine; don't commit it, and move to a real vault if this ever runs anywhere shared.
-- Real notification channel (push/SMS/email) — currently just an in-app polling banner (PRD §13 left this open).
+- Push/SMS notifications — email works (configure SMTP in `.env`); in-app banner is always on. Push/SMS still unwired (PRD §13 left the channel open).
 - Prompt-injection hardening on scraped content (FRD §5/§9) — moot right now since the search agents are mocked and don't ingest live external text yet; revisit when a real adapter starts parsing platform HTML/JSON into the LLM's context.
+- **Live seat availability** — the biggest remaining gap. See §4 above.
